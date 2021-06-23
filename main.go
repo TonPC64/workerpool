@@ -8,7 +8,7 @@ import (
 func main() {
 	now := time.Now()
 
-	q := make(chan event)
+	q := make(chan event, 100)
 
 	go pushToQueue(q, 1000)
 
