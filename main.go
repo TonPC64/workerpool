@@ -2,6 +2,8 @@ package main
 
 import (
 	"fmt"
+	"os"
+	"sync"
 	"time"
 )
 
@@ -9,10 +11,15 @@ func main() {
 	now := time.Now()
 
 	q := make(chan event, 100)
+	f, err := os.Create("text.txt")
+	if err != nil {
+		panic(err)
+	}
+	defer f.Close()
 
-	go pushToQueue(q, 1000)
+	go pushToQueue(q, 200_000)
+	processQueue(q, f)
 
-	processQueue(q)
 	fmt.Println(time.Since(now).String())
 }
 
@@ -28,15 +35,33 @@ func pushToQueue(q chan<- event, max int) {
 	}
 
 	close(q)
+	fmt.Println("pushed")
 }
 
-func processQueue(event <-chan event) {
-	for e := range event {
-		processEvent(e)
+func processQueue(qe <-chan event, f *os.File) {
+	wg := &sync.WaitGroup{}
+	subQ := make(chan event, 10)
+	go func() {
+		for e := range qe {
+			wg.Add(1)
+			subQ <- e
+		}
+		close(subQ)
+		println("end sub queue")
+	}()
+
+	for e := range subQ {
+		go func(ee event) {
+			fmt.Println(ee)
+			_, err := f.WriteString(fmt.Sprintln(ee))
+			if err != nil {
+				fmt.Println(err, "write error")
+			}
+			<-time.After(10 * time.Second)
+			wg.Done()
+		}(e)
 	}
-}
 
-func processEvent(e event) {
-	fmt.Println(e)
-	<-time.After(10 * time.Millisecond)
+	wg.Wait()
+	println("processed all event")
 }
